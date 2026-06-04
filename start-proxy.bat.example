@@ -1,0 +1,20 @@
+@echo off
+chcp 65001 >nul
+title Claude Code Proxy - Silicon Flow
+
+echo ========================================
+echo   Claude Code - Silicon Flow Proxy
+echo ========================================
+echo.
+echo 启动代理服务器 (端口 8787)...
+echo.
+
+REM 设置环境变量（请替换为你的 SiliconFlow API Key）
+set SILICONFLOW_API_KEY=sk-your-siliconflow-api-key-here
+set ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+set ANTHROPIC_API_KEY=sk-siliconflow-proxy
+
+cd /d D:\claude-proxy
+node D:\claude-proxy\server.js
+
+pause

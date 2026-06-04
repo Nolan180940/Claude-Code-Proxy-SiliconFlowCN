@@ -1,0 +1,12 @@
+{
+  "name": "claude-siliconflow-proxy",
+  "version": "1.0.0",
+  "description": "Proxy to convert Anthropic Messages API to Silicon Flow OpenAI-compatible API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

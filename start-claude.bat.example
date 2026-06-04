@@ -1,0 +1,35 @@
+@echo off
+chcp 65001 >nul
+title Claude Code - Silicon Flow
+
+echo ========================================
+echo   Claude Code - Silicon Flow CN
+echo ========================================
+echo.
+
+REM 设置环境变量（请替换为你的 SiliconFlow API Key）
+set SILICONFLOW_API_KEY=sk-your-siliconflow-api-key-here
+set ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+set ANTHROPIC_API_KEY=sk-siliconflow-proxy
+
+REM 清理旧代理进程
+echo [0/2] 清理旧进程...
+taskkill /f /im node.exe /fi "WINDOWTITLE eq Claude-Proxy*" >nul 2>&1
+
+REM 启动代理服务器（后台）
+echo [1/2] 启动 API 代理服务器...
+start "Claude-Proxy" /MIN cmd /c "set SILICONFLOW_API_KEY=sk-your-siliconflow-api-key-here && node D:\claude-proxy\server.js"
+
+REM 等待代理启动
+echo 等待代理启动...
+timeout /t 3 /nobreak >nul
+
+REM 启动 Claude Code（--bare 强制 API Key 模式，跳过 OAuth 登录）
+echo [2/2] 启动 Claude Code...
+echo.
+claude --bare
+
+echo.
+echo Claude Code 已退出。
+echo 关闭代理窗口以完全退出。
+pause
