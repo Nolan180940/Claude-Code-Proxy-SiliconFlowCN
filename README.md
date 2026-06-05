@@ -52,21 +52,47 @@ node server.js
 
 ### 4. 启动 Claude Code
 
-```bash
-# 设置 Claude Code 使用本地代理
-set ANTHROPIC_BASE_URL=http://127.0.0.1:8787
-set ANTHROPIC_API_KEY=sk-siliconflow-proxy
+#### 方式 A：一键启动（推荐新手）
 
-# 启动（--bare 跳过 OAuth 登录）
-claude --bare
-```
-
-或直接使用提供的启动脚本（Windows）：
 ```bash
 # 复制模板并填入你的 Key
 copy start-claude.bat.example start-claude.bat
-# 编辑 start-claude.bat，替换 API Key
+# 编辑 start-claude.bat，替换 SILICONFLOW_API_KEY
 start-claude.bat
+```
+
+#### 方式 B：分开启动（推荐日常使用）
+
+先启动代理（窗口保持打开）：
+```bash
+copy start-proxy.bat.example start-proxy.bat
+# 编辑 start-proxy.bat，替换 SILICONFLOW_API_KEY
+start-proxy.bat
+```
+
+然后在任意终端启动 Claude Code：
+
+**PowerShell:**
+```powershell
+copy start-claude.ps1.example start-claude.ps1
+# 编辑 start-claude.ps1，替换 API Key
+.\start-claude.ps1
+```
+
+**CMD（安装 claude-cn 快捷命令后）:**
+```bash
+# 将 claude-cn.cmd 复制到 PATH 中的目录（如 npm-global）
+copy claude-cn.cmd C:\Users\你的用户名\AppData\Roaming\npm\
+# 之后只需输入：
+claude-cn
+```
+
+#### 方式 C：手动设置环境变量
+
+```bash
+set ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+set ANTHROPIC_API_KEY=sk-siliconflow-proxy
+claude --bare
 ```
 
 ## ⚙️ 配置选项

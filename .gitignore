@@ -1,10 +1,14 @@
 # 敏感文件 - 包含 API Key，不要提交到 Git
 start-claude.bat
 start-proxy.bat
+start-claude.ps1
 
 # 环境变量文件
 .env
 .env.local
+
+# VS Code
+*.code-workspace
 
 # Node
 node_modules/
