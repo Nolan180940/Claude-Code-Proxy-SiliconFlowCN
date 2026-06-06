@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>Claude-Code-Proxy-SiliconFlowCN 仓库汇报</title>
+    <style>
+        /* 全局样式重置 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif;
+        }
+
+        /* PPT 容器与翻页基础样式 - 核心优化：全屏无空白 */
+        body {
+            background: #f5f7fa;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .slides-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            padding: 40px 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            background: white;
+            /* 移除最大宽度限制，全屏展示 */
+            box-shadow: none;
+            border-radius: 0;
+        }
+        .slide.active {
+            opacity: 1;
+            z-index: 10;
+        }
+
+        /* 字体与配色系统 */
+        h1 {
+            font-size: 48px;
+            color: #165DFF;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        h2 {
+            font-size: 36px;
+            color: #2C3E50;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        h3 {
+            font-size: 24px;
+            color: #34495E;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+        p {
+            font-size: 18px;
+            color: #586675;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        .highlight {
+            color: #165DFF;
+            font-weight: 600;
+        }
+        .subtitle {
+            font-size: 20px;
+            color: #7F8C8D;
+            margin-bottom: 30px;
+        }
+
+        /* 布局辅助样式 */
+        .flex-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 40px;
+            margin: 20px 0;
+        }
+        .flex-col {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .card {
+            background: #f8f9fa;
+            padding: 24px;
+            border-radius: 8px;
+            flex: 1;
+            border-left: 4px solid #165DFF;
+        }
+        .icon-box {
+            width: 48px;
+            height: 48px;
+            background: #E8F3FF;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+            font-size: 24px;
+            color: #165DFF;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid #E6E9ED;
+        }
+        th {
+            background: #F5F7FA;
+            color: #2C3E50;
+            font-weight: 600;
+            font-size: 18px;
+        }
+        td {
+            color: #586675;
+            font-size: 16px;
+        }
+
+        /* 流程图样式 */
+        .flow-chart {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin: 40px 0;
+            flex-wrap: wrap;
+        }
+        .flow-node {
+            padding: 20px 30px;
+            background: #E8F3FF;
+            border-radius: 8px;
+            color: #165DFF;
+            font-weight: 600;
+            font-size: 16px;
+            min-width: 180px;
+            text-align: center;
+        }
+        .flow-arrow {
+            font-size: 24px;
+            color: #BDC3C7;
+        }
+
+        /* 响应式适配：不同屏幕尺寸自动调整字体和间距 */
+        @media screen and (max-width: 1200px) {
+            h1 { font-size: 40px; }
+            h2 { font-size: 32px; }
+            h3 { font-size: 22px; }
+            p { font-size: 16px; }
+            .flex-row { gap: 20px; }
+        }
+        @media screen and (max-width: 768px) {
+            h1 { font-size: 32px; }
+            h2 { font-size: 28px; }
+            h3 { font-size: 20px; }
+            p { font-size: 14px; }
+            .slide { padding: 20px 30px; }
+            .flex-row { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <div class="slides-container">
+        <!-- 第1页：封面 -->
+        <div class="slide active">
+            <div style="text-align: center;">
+                <h1>Claude-Code-Proxy-SiliconFlowCN</h1>
+                <p class="subtitle">Claude Code 对接国产大模型平台的轻量级API代理</p>
+                <div style="margin-top: 80px; color: #BDC3C7; font-size: 16px;">
+                    轻量 · 兼容 · 国产化适配
+                </div>
+            </div>
+        </div>
+
+        <!-- 第2页：仓库核心定位 -->
+        <div class="slide">
+            <h2>仓库核心定位</h2>
+            <div class="flex-col" style="margin-top: 20px;">
+                <p>一款打通 <span class="highlight">Claude Code</span> 与国产大模型平台 <span class="highlight">SiliconFlow（硅基流动）</span> 的轻量级API代理工具</p>
+                <div class="card">
+                    <h3>核心目标</h3>
+                    <p>完成 Anthropic Messages API 与 OpenAI 兼容 API 之间的双向转换，让用户可以用 SiliconFlow 上的国产大模型驱动 Claude Code</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 第3页：核心工作原理 -->
+        <div class="slide">
+            <h2>核心工作原理</h2>
+            <p>本地搭建中转服务（默认地址：http://127.0.0.1:8787），实现双向协议与数据流转换</p>
+            <div class="flow-chart">
+                <div class="flow-node">Claude Code</div>
+                <div class="flow-arrow">──▶</div>
+                <div class="flow-node">Anthropic API</div>
+                <div class="flow-arrow">──▶</div>
+                <div class="flow-node" style="background: #165DFF; color: white;">本地Proxy</div>
+                <div class="flow-arrow">──▶</div>
+                <div class="flow-node">OpenAI API</div>
+                <div class="flow-arrow">──▶</div>
+                <div class="flow-node">SiliconFlow</div>
+            </div>
+            <div class="flow-chart" style="margin-top: -20px;">
+                <div class="flow-node">Claude Code</div>
+                <div class="flow-arrow">◀──</div>
+                <div class="flow-node">Anthropic SSE</div>
+                <div class="flow-arrow">◀──</div>
+                <div class="flow-node" style="background: #165DFF; color: white;">本地Proxy</div>
+                <div class="flow-arrow">◀──</div>
+                <div class="flow-node">OpenAI SSE</div>
+                <div class="flow-arrow">◀──</div>
+                <div class="flow-node">SiliconFlow</div>
+            </div>
+            <div class="flex-row" style="margin-top: 20px;">
+                <div class="card">
+                    <h3>请求转换</h3>
+                    <p>将 Claude Code 发出的 Anthropic 格式请求，转为 SiliconFlow 支持的 OpenAI 格式</p>
+                </div>
+                <div class="card">
+                    <h3>响应转换</h3>
+                    <p>将 SiliconFlow 返回的 OpenAI 流式响应，转回 Anthropic 格式给 Claude Code</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 第4页：快速使用流程 -->
+        <div class="slide">
+            <h2>快速使用流程</h2>
+            <div class="flex-col" style="gap: 24px;">
+                <div class="flex-row">
+                    <div class="icon-box">1</div>
+                    <div class="flex-col" style="flex: 1;">
+                        <h3>前置准备</h3>
+                        <p>在 SiliconFlow 官网注册账号，获取 API Key（核心凭证）</p>
+                    </div>
+                </div>
+                <div class="flex-row">
+                    <div class="icon-box">2</div>
+                    <div class="flex-col" style="flex: 1;">
+                        <h3>环境配置</h3>
+                        <p>复制 .env.example 为 .env，填入 SILICONFLOW_API_KEY=你的密钥；或终端临时设置环境变量</p>
+                    </div>
+                </div>
+                <div class="flex-row">
+                    <div class="icon-box">3</div>
+                    <div class="flex-col" style="flex: 1;">
+                        <h3>启动使用</h3>
+                        <p>安装依赖：<code style="background: #f0f2f5; padding: 2px 8px; border-radius: 4px;">npm install</code></p>
+                        <p>启动代理：<code style="background: #f0f2f5; padding: 2px 8px; border-radius: 4px;">node server.js</code></p>
+                        <p>启动 Claude Code：指向本地代理地址 http://127.0.0.1:8787 即可</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 第5页：核心功能与优势 -->
+        <div class="slide">
+            <h2>核心功能与优势</h2>
+            <div class="flex-row" style="margin-top: 30px;">
+                <div class="card">
+                    <div class="icon-box">🇨🇳</div>
+                    <h3>国产化适配</h3>
+                    <p>无需依赖 Anthropic 官方服务，改用国内 SiliconFlow 平台的大模型资源</p>
+                </div>
+                <div class="card">
+                    <div class="icon-box">♻️</div>
+                    <h3>协议兼容</h3>
+                    <p>本地完成 API 协议转换，保留 Claude Code 原生使用体验，无感知切换</p>
+                </div>
+            </div>
+            <div class="flex-row">
+                <div class="card">
+                    <div class="icon-box">💻</div>
+                    <h3>灵活部署</h3>
+                    <p>支持 Windows/macOS/Linux，提供批处理/脚本模板，开箱即用</p>
+                </div>
+                <div class="card">
+                    <div class="icon-box">✨</div>
+                    <h3>轻量无侵入</h3>
+                    <p>仅本地启动代理服务，不修改 Claude Code 本身，配置灵活可自定义</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 第6页：核心文件说明 -->
+        <div class="slide">
+            <h2>核心文件说明</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>文件/目录</th>
+                        <th>核心作用</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>.env.example</td>
+                        <td>环境变量示例文件，需复制为 .env 并填入 SiliconFlow API Key</td>
+                    </tr>
+                    <tr>
+                        <td>server.js</td>
+                        <td>代理服务核心代码，实现 API 协议转换与 SSE 流式响应处理</td>
+                    </tr>
+                    <tr>
+                        <td>claude-cn.cmd</td>
+                        <td>Windows CMD 快捷命令模板，快速启动 Claude Code</td>
+                    </tr>
+                    <tr>
+                        <td>*.bat.example/*.ps1.example</td>
+                        <td>批处理/PS 脚本示例，封装启动环境变量配置</td>
+                    </tr>
+                    <tr>
+                        <td>README.md</td>
+                        <td>完整使用文档，含配置、启动、自定义等全流程说明</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 第7页：适配场景与价值 -->
+        <div class="slide">
+            <h2>适配场景与价值</h2>
+            <div class="flex-col" style="gap: 20px;">
+                <div class="card">
+                    <h3>企业级国产化需求</h3>
+                    <p>满足企业对大模型服务“国产化、自主可控”的要求，替换海外 Anthropic 服务</p>
+                </div>
+                <div class="card">
+                    <h3>开发者低成本切换</h3>
+                    <p>无需重构 Claude Code 代码，仅通过代理即可切换到国产模型，降低迁移成本</p>
+                </div>
+                <div class="card">
+                    <h3>本土模型资源利用</h3>
+                    <p>充分利用 SiliconFlow 丰富的国产大模型生态，兼顾 Claude Code 交互体验</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 第8页：总结 -->
+        <div class="slide">
+            <h2>总结</h2>
+            <div class="flex-col" style="margin-top: 20px;">
+                <p>Claude-Code-Proxy-SiliconFlowCN 核心解决了 Claude Code 仅适配 Anthropic API 的限制，是<span class="highlight">低成本、无侵入、高兼容</span>的国产化适配方案。</p>
+                <div class="card" style="margin-top: 20px;">
+                    <h3>核心亮点</h3>
+                    <p>✅ 轻量级代理，本地部署无依赖</p>
+                    <p>✅ 双向协议转换，保留原生体验</p>
+                    <p>✅ 多系统适配，开箱即用</p>
+                    <p>✅ 国产化替代，满足合规需求</p>
+                </div>
+                <p style="margin-top: 30px; text-align: center; font-size: 20px;">让 Claude Code 与国产大模型平台无缝衔接</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 翻页逻辑：键盘左右键切换幻灯片
+        const slides = document.querySelectorAll('.slide');
+        let currentSlide = 0;
+
+        // 显示当前幻灯片
+        function showSlide(index) {
+            slides.forEach(slide => slide.classList.remove('active'));
+            slides[index].classList.add('active');
+            currentSlide = index;
+        }
+
+        // 键盘事件监听
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') {
+                // 下一页，最后一页则回到第一页
+                const next = (currentSlide + 1) % slides.length;
+                showSlide(next);
+            } else if (e.key === 'ArrowLeft') {
+                // 上一页，第一页则到最后一页
+                const prev = (currentSlide - 1 + slides.length) % slides.length;
+                showSlide(prev);
+            }
+        });
+
+        // 初始化显示第一页
+        showSlide(0);
+
+        // 窗口大小变化时重新适配
+        window.addEventListener('resize', () => {
+            const activeSlide = document.querySelector('.slide.active');
+            if (activeSlide) {
+                activeSlide.style.width = `${window.innerWidth}px`;
+                activeSlide.style.height = `${window.innerHeight}px`;
+            }
+        });
+    </script>
+</body>
+</html>
