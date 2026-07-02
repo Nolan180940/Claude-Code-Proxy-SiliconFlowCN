@@ -519,7 +519,7 @@ app.post('/v1/messages', async (req, res) => {
       const messageId = 'msg_' + Date.now();
       let buffer = '';
       let messageStarted = false;
-      let contentBlockStarted = false;
+      let startedBlockIndices = new Set();  // 追踪所有已开始的 content block index
       let resEnded = false;
 
       const safeWrite = (data) => {
@@ -528,6 +528,14 @@ app.post('/v1/messages', async (req, res) => {
 
       const safeEnd = () => {
         if (!resEnded) { resEnded = true; res.end(); }
+      };
+
+      // 发送所有已开始 block 的 content_block_stop
+      const stopAllBlocks = () => {
+        for (const idx of startedBlockIndices) {
+          safeWrite(`event: content_block_stop\ndata: ${JSON.stringify({ type: 'content_block_stop', index: idx })}\n\n`);
+        }
+        startedBlockIndices.clear();
       };
 
       const sfReq = https.request(reqOptions, (sfRes) => {
@@ -554,9 +562,7 @@ app.post('/v1/messages', async (req, res) => {
             if (line.startsWith('data: ')) {
               const data = line.slice(6).trim();
               if (data === '[DONE]') {
-                if (contentBlockStarted) {
-                  safeWrite(`event: content_block_stop\ndata: ${JSON.stringify({ type: 'content_block_stop', index: 0 })}\n\n`);
-                }
+                stopAllBlocks();
                 safeWrite(`event: message_stop\ndata: ${JSON.stringify({ type: 'message_stop' })}\n\n`);
                 safeEnd();
                 return;
@@ -575,8 +581,8 @@ app.post('/v1/messages', async (req, res) => {
                 }
 
                 if (delta.content) {
-                  if (!contentBlockStarted) {
-                    contentBlockStarted = true;
+                  if (!startedBlockIndices.has(0)) {
+                    startedBlockIndices.add(0);
                     safeWrite(`event: content_block_start\ndata: ${JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })}\n\n`);
                   }
                   safeWrite(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: delta.content } })}\n\n`);
@@ -585,7 +591,8 @@ app.post('/v1/messages', async (req, res) => {
                 if (delta.tool_calls) {
                   for (const tc of delta.tool_calls) {
                     if (tc.index !== undefined) {
-                      if (tc.function?.name) {
+                      if (tc.function?.name && !startedBlockIndices.has(tc.index)) {
+                        startedBlockIndices.add(tc.index);
                         safeWrite(`event: content_block_start\ndata: ${JSON.stringify({ type: 'content_block_start', index: tc.index, content_block: { type: 'tool_use', id: tc.id || '', name: tc.function.name, input: {} } })}\n\n`);
                       }
                       if (tc.function?.arguments) {
@@ -600,9 +607,7 @@ app.post('/v1/messages', async (req, res) => {
                   if (choice.finish_reason === 'length') stop_reason = 'max_tokens';
                   else if (choice.finish_reason === 'tool_calls') stop_reason = 'tool_use';
 
-                  if (contentBlockStarted) {
-                    safeWrite(`event: content_block_stop\ndata: ${JSON.stringify({ type: 'content_block_stop', index: 0 })}\n\n`);
-                  }
+                  stopAllBlocks();
 
                   safeWrite(`event: message_delta\ndata: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: stop_reason, stop_sequence: null }, usage: { output_tokens: parsed.usage?.completion_tokens || 0 } })}\n\n`);
                   safeWrite(`event: message_stop\ndata: ${JSON.stringify({ type: 'message_stop' })}\n\n`);
@@ -617,6 +622,7 @@ app.post('/v1/messages', async (req, res) => {
 
         sfRes.on('end', () => {
           if (!resEnded) {
+            stopAllBlocks();
             safeWrite(`event: message_stop\ndata: ${JSON.stringify({ type: 'message_stop' })}\n\n`);
             safeEnd();
           }
