@@ -5,25 +5,60 @@ const http = require('http');
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 
-// ============ 配置 ============
-const SILICONFLOW_BASE = 'https://api.siliconflow.cn';
-const API_KEY = process.env.SILICONFLOW_API_KEY || '';
-
-// 模型映射：Anthropic 模型名 → Silicon Flow 模型名
-const MODEL_MAP = {
-  // 默认映射（所有未匹配的模型都走这个）
-  'default': process.env.SILICONFLOW_DEFAULT_MODEL || 'deepseek-ai/DeepSeek-V4-Pro',
-  // 特定映射
-  'claude-sonnet-4-20250514': process.env.SILICONFLOW_SONNET_MODEL || 'deepseek-ai/DeepSeek-V4-Pro',
-  'claude-3-5-sonnet-20241022': process.env.SILICONFLOW_SONNET_MODEL || 'deepseek-ai/DeepSeek-V4-Pro',
-  'claude-opus-4-20250514': process.env.SILICONFLOW_OPUS_MODEL || 'deepseek-ai/DeepSeek-V4-Pro',
-  'claude-opus-4-8': process.env.SILICONFLOW_OPUS_MODEL || 'deepseek-ai/DeepSeek-V4-Pro',
-  'claude-3-opus-20240229': process.env.SILICONFLOW_OPUS_MODEL || 'deepseek-ai/DeepSeek-V4-Pro',
-  'claude-haiku-3-5-20241022': process.env.SILICONFLOW_HAIKU_MODEL || 'deepseek-ai/DeepSeek-V4-Pro',
+// ============ 多 Provider 配置 ============
+// Provider 1: DeepSeek 官方 API（默认 / Sonnet 级）
+// Provider 2: SiliconFlow（Opus → MiniMax-M2.5 / Haiku → GLM-5.2）
+const PROVIDERS = {
+  deepseek: {
+    name: 'DeepSeek',
+    base: 'https://api.deepseek.com',
+    apiKey: process.env.DEEPSEEK_API_KEY || '',
+  },
+  siliconflow: {
+    name: 'SiliconFlow',
+    base: 'https://api.siliconflow.cn',
+    apiKey: process.env.SILICONFLOW_API_KEY || '',
+  },
 };
 
-function getSiliconFlowModel(anthropicModel) {
+// 模型映射：Anthropic 模型名 → { model, provider }
+const MODEL_MAP = {
+  'default': {
+    model: process.env.DEEPSEEK_DEFAULT_MODEL || 'deepseek-chat',
+    provider: 'deepseek',
+  },
+  'claude-sonnet-4-20250514': {
+    model: process.env.DEEPSEEK_SONNET_MODEL || 'deepseek-chat',
+    provider: 'deepseek',
+  },
+  'claude-3-5-sonnet-20241022': {
+    model: process.env.DEEPSEEK_SONNET_MODEL || 'deepseek-chat',
+    provider: 'deepseek',
+  },
+  'claude-opus-4-20250514': {
+    model: process.env.SILICONFLOW_OPUS_MODEL || 'MiniMaxAI/MiniMax-M2.5',
+    provider: 'siliconflow',
+  },
+  'claude-opus-4-8': {
+    model: process.env.SILICONFLOW_OPUS_MODEL || 'MiniMaxAI/MiniMax-M2.5',
+    provider: 'siliconflow',
+  },
+  'claude-3-opus-20240229': {
+    model: process.env.SILICONFLOW_OPUS_MODEL || 'MiniMaxAI/MiniMax-M2.5',
+    provider: 'siliconflow',
+  },
+  'claude-haiku-3-5-20241022': {
+    model: process.env.SILICONFLOW_HAIKU_MODEL || 'zai-org/GLM-5.2',
+    provider: 'siliconflow',
+  },
+};
+
+function getModelConfig(anthropicModel) {
   return MODEL_MAP[anthropicModel] || MODEL_MAP['default'];
+}
+
+function getTargetModel(anthropicModel) {
+  return getModelConfig(anthropicModel).model;
 }
 
 // ============ Anthropic → OpenAI 请求转换 ============
@@ -93,7 +128,7 @@ function convertRequest(anthropicBody) {
   }
 
   const openaiBody = {
-    model: getSiliconFlowModel(anthropicBody.model),
+    model: getTargetModel(anthropicBody.model),
     messages: messages,
     max_tokens: Math.min(anthropicBody.max_tokens || 4096, 8192),
     stream: !!anthropicBody.stream,
@@ -263,9 +298,9 @@ function convertStreamChunk(openaiChunk, anthropicModel, messageId) {
 }
 
 // ============ HTTP 请求辅助函数 ============
-function makeRequest(options, body) {
+function makeRequest(baseUrl, apiKey, options, body) {
   return new Promise((resolve, reject) => {
-    const url = new URL(options.path, SILICONFLOW_BASE);
+    const url = new URL(options.path, baseUrl);
     const reqOptions = {
       hostname: url.hostname,
       port: url.port || 443,
@@ -273,7 +308,7 @@ function makeRequest(options, body) {
       method: options.method || 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         ...options.headers
       }
     };
@@ -302,21 +337,26 @@ function makeRequest(options, body) {
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
-    service: 'Claude Code → Silicon Flow Proxy',
-    default_model: MODEL_MAP['default'],
-    models: MODEL_MAP
+    service: 'Claude Code → Multi-Provider Proxy',
+    providers: Object.keys(PROVIDERS),
+    default: MODEL_MAP['default'],
+    models: Object.fromEntries(
+      Object.entries(MODEL_MAP).filter(([k]) => k !== 'default').map(([k, v]) => [k, `${v.provider}:${v.model}`])
+    )
   });
 });
 
 // /v1/messages - Anthropic Messages API
 app.post('/v1/messages', async (req, res) => {
   const anthropicModel = req.body.model || 'claude-sonnet-4-20250514';
-  const siliconFlowModel = getSiliconFlowModel(anthropicModel);
+  const modelConfig = getModelConfig(anthropicModel);
+  const targetModel = modelConfig.model;
+  const provider = PROVIDERS[modelConfig.provider];
   const isStream = req.body.stream === true;
 
   console.log(`\n=== [${new Date().toISOString()}] REQUEST ===`);
   console.log(`Anthropic model: ${anthropicModel}`);
-  console.log(`SiliconFlow model: ${siliconFlowModel}`);
+  console.log(`Provider: ${provider.name} | Target: ${targetModel}`);
   console.log(`Stream: ${isStream}`);
 
   try {
@@ -345,7 +385,7 @@ app.post('/v1/messages', async (req, res) => {
 
     if (isStream) {
       // 流式请求
-      const url = new URL('/v1/chat/completions', SILICONFLOW_BASE);
+      const url = new URL('/v1/chat/completions', provider.base);
       const reqOptions = {
         hostname: url.hostname,
         port: url.port || 443,
@@ -353,7 +393,7 @@ app.post('/v1/messages', async (req, res) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
+          'Authorization': `Bearer ${provider.apiKey}`,
           'Accept': 'text/event-stream'
         }
       };
@@ -493,6 +533,7 @@ app.post('/v1/messages', async (req, res) => {
     } else {
       // 非流式请求
       const result = await makeRequest(
+        provider.base, provider.apiKey,
         { method: 'POST', path: '/v1/chat/completions' },
         openaiBody
       );
@@ -529,9 +570,11 @@ const PORT = process.env.PORT || 8787;
 
 const server = app.listen(PORT, () => {
   console.log(`\n========================================`);
-  console.log(`  Claude Code → Silicon Flow Proxy`);
-  console.log(`  运行在: http://127.0.0.1:${PORT}`);
-  console.log(`  默认模型: ${MODEL_MAP['default']}`);
+  console.log(`  Claude Code → Multi-Provider Proxy`);
+  console.log(`  Listening: http://127.0.0.1:${PORT}`);
+  console.log(`  Default/Sonnet: [deepseek] ${MODEL_MAP['default'].model}`);
+  console.log(`  Opus:           [siliconflow] ${MODEL_MAP['claude-opus-4-20250514'].model}`);
+  console.log(`  Haiku:          [siliconflow] ${MODEL_MAP['claude-haiku-3-5-20241022'].model}`);
   console.log(`========================================\n`);
 });
 
