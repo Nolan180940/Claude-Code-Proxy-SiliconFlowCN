@@ -66,14 +66,22 @@ function getTargetModel(anthropicModel) {
 
 // ============ 图片检测 & 压缩 ============
 
-/** 检测请求中是否包含图片 */
+/** 检测请求中是否包含图片（递归检查 tool_result 内部） */
 function hasImages(anthropicBody) {
   if (!anthropicBody.messages) return false;
   for (const msg of anthropicBody.messages) {
-    if (Array.isArray(msg.content)) {
-      for (const block of msg.content) {
-        if (block && block.type === 'image') return true;
-      }
+    if (_checkBlocks(msg.content)) return true;
+  }
+  return false;
+}
+function _checkBlocks(blocks) {
+  if (!blocks || !Array.isArray(blocks)) return false;
+  for (const block of blocks) {
+    if (!block) continue;
+    if (block.type === 'image') return true;
+    // 递归检查 tool_result 内部
+    if (block.type === 'tool_result') {
+      if (_checkBlocks(block.content)) return true;
     }
   }
   return false;
@@ -225,22 +233,77 @@ async function convertRequest(anthropicBody, opts = {}) {
           } else if (block.type === 'tool_result') {
             openaiMsg.role = 'tool';
             openaiMsg.tool_call_id = block.tool_use_id;
-            // 截断过长的 tool 结果，省 token（先截断再 stringify，避免破坏 JSON 结构）
+            // 截断过长的 tool 结果，省 token
             const MAX_TOOL_RESULT = 4000;
             if (typeof block.content === 'string') {
               openaiMsg.content = block.content.length > MAX_TOOL_RESULT
                 ? block.content.slice(0, MAX_TOOL_RESULT) + `\n... [truncated: ${block.content.length} → ${MAX_TOOL_RESULT} chars]`
                 : block.content;
             } else if (Array.isArray(block.content)) {
-              const str = JSON.stringify(block.content);
-              openaiMsg.content = str.length > MAX_TOOL_RESULT
-                ? str.slice(0, MAX_TOOL_RESULT - 50) + `\n... [truncated: ${str.length} → ${MAX_TOOL_RESULT - 50} chars]`
-                : str;
+              // 检查 tool_result 内部是否包含图片（如 CUA 截图）
+              let hasToolImages = false;
+              const textParts = [];
+              for (const sub of block.content) {
+                if (typeof sub === 'string') {
+                  textParts.push(sub);
+                } else if (sub && sub.type === 'image' && sub.source) {
+                  hasToolImages = true;
+                  // 提取图片：压缩后放到当前消息的 parts 中
+                  let imgData, imgType;
+                  if (sub.source.type === 'url') {
+                    try {
+                      const compressed = await downloadAndCompress(sub.source.url);
+                      imgData = compressed.data; imgType = compressed.mediaType;
+                    } catch (e) {
+                      console.error('  Tool image URL download failed:', e.message);
+                      continue;
+                    }
+                  } else {
+                    imgData = sub.source.data;
+                    imgType = sub.source.media_type;
+                    if (compressImages) {
+                      const compressed = await compressImage(imgData, imgType);
+                      imgData = compressed.data; imgType = compressed.mediaType;
+                    }
+                  }
+                  parts.push({
+                    type: 'image_url',
+                    image_url: { url: `data:${imgType};base64,${imgData}` }
+                  });
+                  console.log('  Extracted image from tool_result');
+                } else if (sub && sub.type === 'text') {
+                  textParts.push(sub.text);
+                } else {
+                  textParts.push(JSON.stringify(sub));
+                }
+              }
+              const summary = textParts.join('\n');
+              openaiMsg.content = hasToolImages
+                ? `[Tool result with ${textParts.length > 0 ? 'text and ' : ''}image(s) captured]\n${summary}`.slice(0, MAX_TOOL_RESULT)
+                : (summary.length > MAX_TOOL_RESULT
+                    ? summary.slice(0, MAX_TOOL_RESULT) + `\n... [truncated]`
+                    : summary);
             } else if (typeof block.content === 'object' && block.content !== null) {
-              const str = JSON.stringify(block.content);
-              openaiMsg.content = str.length > MAX_TOOL_RESULT
-                ? str.slice(0, MAX_TOOL_RESULT - 50) + `\n... [truncated: ${str.length} → ${MAX_TOOL_RESULT - 50} chars]`
-                : str;
+              // 单个对象，检测是否是 image 类型
+              if (block.content.type === 'image' && block.content.source) {
+                let imgData = block.content.source.data;
+                let imgType = block.content.source.media_type;
+                if (compressImages) {
+                  const compressed = await compressImage(imgData, imgType);
+                  imgData = compressed.data; imgType = compressed.mediaType;
+                }
+                parts.push({
+                  type: 'image_url',
+                  image_url: { url: `data:${imgType};base64,${imgData}` }
+                });
+                openaiMsg.content = '[Tool result: image captured]';
+                console.log('  Extracted single image from tool_result');
+              } else {
+                const str = JSON.stringify(block.content);
+                openaiMsg.content = str.length > MAX_TOOL_RESULT
+                  ? str.slice(0, MAX_TOOL_RESULT - 50) + `\n... [truncated]`
+                  : str;
+              }
             } else {
               openaiMsg.content = String(block.content);
             }
