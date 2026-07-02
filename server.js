@@ -20,7 +20,7 @@ const PROVIDERS = {
     base: 'https://api.siliconflow.cn',
     apiKey: process.env.SILICONFLOW_API_KEY || '',
     // 带图的请求用视觉模型
-    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'Qwen/Qwen2.5-VL-72B-Instruct',
+    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'nex-agi/Nex-N2-Pro',
   },
 };
 
@@ -321,7 +321,7 @@ async function convertRequest(anthropicBody, opts = {}) {
   }
 
   const openaiBody = {
-    model: getTargetModel(anthropicBody.model),
+    model: opts.targetModel || getTargetModel(anthropicBody.model),
     messages: messages,
     max_tokens: Math.min(anthropicBody.max_tokens || 4096, 8192),
     stream: !!anthropicBody.stream,
@@ -567,7 +567,7 @@ app.post('/v1/messages', async (req, res) => {
     const visionPrompt = containsImages
       ? 'You are a vision analysis module. When provided with an image (screenshot, photo, etc.), describe what you see in detail in plain text. Focus on: text content, UI elements (buttons, windows, menus), layout structure, colors, and anything actionable. Reply with text only — do NOT attempt to generate or return images.'
       : '';
-    const openaiBody = await convertRequest(req.body, { compressImages: containsImages, visionPrompt });
+    const openaiBody = await convertRequest(req.body, { compressImages: containsImages, visionPrompt, targetModel });
     console.log(`Converted body keys: ${Object.keys(openaiBody).join(', ')}`);
     console.log(`model: ${openaiBody.model}`);
     console.log(`max_tokens: ${openaiBody.max_tokens}`);
