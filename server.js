@@ -20,7 +20,7 @@ const PROVIDERS = {
     base: 'https://api.siliconflow.cn',
     apiKey: process.env.SILICONFLOW_API_KEY || '',
     // 带图的请求用视觉模型
-    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'nex-agi/Nex-N2-Pro',
+    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'Qwen/Qwen2.5-VL-72B-Instruct',
   },
 };
 
