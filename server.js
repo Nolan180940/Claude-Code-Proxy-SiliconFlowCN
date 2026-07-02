@@ -24,15 +24,15 @@ const PROVIDERS = {
 // 模型映射：Anthropic 模型名 → { model, provider }
 const MODEL_MAP = {
   'default': {
-    model: process.env.DEEPSEEK_DEFAULT_MODEL || 'deepseek-chat',
+    model: process.env.DEEPSEEK_DEFAULT_MODEL || 'deepseek-v4-pro',
     provider: 'deepseek',
   },
   'claude-sonnet-4-20250514': {
-    model: process.env.DEEPSEEK_SONNET_MODEL || 'deepseek-chat',
+    model: process.env.DEEPSEEK_SONNET_MODEL || 'deepseek-v4-pro',
     provider: 'deepseek',
   },
   'claude-3-5-sonnet-20241022': {
-    model: process.env.DEEPSEEK_SONNET_MODEL || 'deepseek-chat',
+    model: process.env.DEEPSEEK_SONNET_MODEL || 'deepseek-v4-pro',
     provider: 'deepseek',
   },
   'claude-opus-4-20250514': {
