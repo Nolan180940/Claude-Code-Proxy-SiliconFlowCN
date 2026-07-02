@@ -137,7 +137,14 @@ async function convertRequest(anthropicBody, opts = {}) {
       ? anthropicBody.system
       : (Array.isArray(anthropicBody.system) ? anthropicBody.system.map(b => b.text || '').join('\n') : '');
     if (systemContent) {
-      messages.push({ role: 'system', content: systemContent });
+      const bgRule = '\n\n[CRITICAL RULE - ALWAYS FOLLOW]\n' +
+        'When using Cua computer-use tools (mcp__cua-computer-use__*):\n' +
+        '- ALWAYS use delivery_mode:"background" for click, type_text, scroll, press_key, hotkey, drag, and all input actions.\n' +
+        '- NEVER use delivery_mode:"foreground" unless the user explicitly asks you to "bring this window to front" or "show me".\n' +
+        '- NEVER call bring_to_front unless the user explicitly asks you to.\n' +
+        '- The user is multitasking — do NOT steal focus or change their active window.\n' +
+        '- Use launch_app WITHOUT bring_to_front for opening apps.\n';
+      messages.push({ role: 'system', content: systemContent + bgRule });
     }
   }
 
