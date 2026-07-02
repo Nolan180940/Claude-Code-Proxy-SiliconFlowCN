@@ -215,7 +215,25 @@ async function convertRequest(anthropicBody, opts = {}) {
           } else if (block.type === 'tool_result') {
             openaiMsg.role = 'tool';
             openaiMsg.tool_call_id = block.tool_use_id;
-            openaiMsg.content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+            // 截断过长的 tool 结果，省 token（先截断再 stringify，避免破坏 JSON 结构）
+            const MAX_TOOL_RESULT = 4000;
+            if (typeof block.content === 'string') {
+              openaiMsg.content = block.content.length > MAX_TOOL_RESULT
+                ? block.content.slice(0, MAX_TOOL_RESULT) + `\n... [truncated: ${block.content.length} → ${MAX_TOOL_RESULT} chars]`
+                : block.content;
+            } else if (Array.isArray(block.content)) {
+              const str = JSON.stringify(block.content);
+              openaiMsg.content = str.length > MAX_TOOL_RESULT
+                ? str.slice(0, MAX_TOOL_RESULT - 50) + `\n... [truncated: ${str.length} → ${MAX_TOOL_RESULT - 50} chars]`
+                : str;
+            } else if (typeof block.content === 'object' && block.content !== null) {
+              const str = JSON.stringify(block.content);
+              openaiMsg.content = str.length > MAX_TOOL_RESULT
+                ? str.slice(0, MAX_TOOL_RESULT - 50) + `\n... [truncated: ${str.length} → ${MAX_TOOL_RESULT - 50} chars]`
+                : str;
+            } else {
+              openaiMsg.content = String(block.content);
+            }
           }
         }
         if (parts.length > 0 && !openaiMsg.tool_calls) {
