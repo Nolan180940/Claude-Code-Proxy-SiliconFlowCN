@@ -39,16 +39,16 @@ const MODEL_MAP = {
     provider: 'deepseek',
   },
   'claude-opus-4-20250514': {
-    model: process.env.SILICONFLOW_OPUS_MODEL || 'MiniMaxAI/MiniMax-M2.5',
-    provider: 'siliconflow',
+    model: process.env.DEEPSEEK_OPUS_MODEL || 'deepseek-v4-pro',
+    provider: 'deepseek',
   },
   'claude-opus-4-8': {
-    model: process.env.SILICONFLOW_OPUS_MODEL || 'MiniMaxAI/MiniMax-M2.5',
-    provider: 'siliconflow',
+    model: process.env.DEEPSEEK_OPUS_MODEL || 'deepseek-v4-pro',
+    provider: 'deepseek',
   },
   'claude-3-opus-20240229': {
-    model: process.env.SILICONFLOW_OPUS_MODEL || 'MiniMaxAI/MiniMax-M2.5',
-    provider: 'siliconflow',
+    model: process.env.DEEPSEEK_OPUS_MODEL || 'deepseek-v4-pro',
+    provider: 'deepseek',
   },
   'claude-haiku-3-5-20241022': {
     model: process.env.SILICONFLOW_HAIKU_MODEL || 'zai-org/GLM-5.2',
@@ -686,7 +686,7 @@ const server = app.listen(PORT, () => {
   console.log(`  Claude Code → Multi-Provider Proxy`);
   console.log(`  Listening: http://127.0.0.1:${PORT}`);
   console.log(`  Default/Sonnet: [deepseek] ${MODEL_MAP['default'].model}`);
-  console.log(`  Opus:           [siliconflow] ${MODEL_MAP['claude-opus-4-20250514'].model}`);
+  console.log(`  Opus:           [deepseek] ${MODEL_MAP['claude-opus-4-20250514'].model}`);
   console.log(`  Haiku:          [siliconflow] ${MODEL_MAP['claude-haiku-3-5-20241022'].model}`);
   console.log(`========================================\n`);
 });
