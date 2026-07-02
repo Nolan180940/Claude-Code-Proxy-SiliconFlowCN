@@ -128,10 +128,13 @@ function downloadAndCompress(url) {
 
 // ============ Anthropic → OpenAI 请求转换（异步：压缩图片）============
 async function convertRequest(anthropicBody, opts = {}) {
-  const { compressImages = true } = opts;
+  const { compressImages = true, visionPrompt = '' } = opts;
   const messages = [];
 
   // Anthropic 的 system prompt 转为 OpenAI 的 system message
+  if (visionPrompt) {
+    messages.push({ role: 'system', content: visionPrompt });
+  }
   if (anthropicBody.system) {
     const systemContent = typeof anthropicBody.system === 'string'
       ? anthropicBody.system
@@ -498,7 +501,10 @@ app.post('/v1/messages', async (req, res) => {
   console.log(`Stream: ${isStream}`);
 
   try {
-    const openaiBody = await convertRequest(req.body, { compressImages: containsImages });
+    const visionPrompt = containsImages
+      ? 'You are a vision analysis module. When provided with an image (screenshot, photo, etc.), describe what you see in detail in plain text. Focus on: text content, UI elements (buttons, windows, menus), layout structure, colors, and anything actionable. Reply with text only — do NOT attempt to generate or return images.'
+      : '';
+    const openaiBody = await convertRequest(req.body, { compressImages: containsImages, visionPrompt });
     console.log(`Converted body keys: ${Object.keys(openaiBody).join(', ')}`);
     console.log(`model: ${openaiBody.model}`);
     console.log(`max_tokens: ${openaiBody.max_tokens}`);
