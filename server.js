@@ -1,6 +1,7 @@
 const express = require('express');
 const https = require('https');
 const http = require('http');
+const sharp = require('sharp');
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -18,6 +19,8 @@ const PROVIDERS = {
     name: 'SiliconFlow',
     base: 'https://api.siliconflow.cn',
     apiKey: process.env.SILICONFLOW_API_KEY || '',
+    // 带图的请求用视觉模型
+    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'nex-agi/Nex-N2-Pro',
   },
 };
 
@@ -61,8 +64,71 @@ function getTargetModel(anthropicModel) {
   return getModelConfig(anthropicModel).model;
 }
 
-// ============ Anthropic → OpenAI 请求转换 ============
-function convertRequest(anthropicBody) {
+// ============ 图片检测 & 压缩 ============
+
+/** 检测请求中是否包含图片 */
+function hasImages(anthropicBody) {
+  if (!anthropicBody.messages) return false;
+  for (const msg of anthropicBody.messages) {
+    if (Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block && block.type === 'image') return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** 压缩 base64 图片：缩小到 800px 宽，JPEG quality 60 */
+async function compressImage(base64Data, mediaType) {
+  try {
+    const buffer = Buffer.from(base64Data, 'base64');
+    const compressed = await sharp(buffer)
+      .resize({ width: 800, withoutEnlargement: true })
+      .jpeg({ quality: 60 })
+      .toBuffer();
+    const newBase64 = compressed.toString('base64');
+    console.log(`  Image compressed: ${(buffer.length/1024).toFixed(1)}KB → ${(compressed.length/1024).toFixed(1)}KB`);
+    return { data: newBase64, mediaType: 'image/jpeg' };
+  } catch (e) {
+    console.error('  Image compression failed, using original:', e.message);
+    return { data: base64Data, mediaType };
+  }
+}
+
+/** 从 URL 下载图片并压缩，返回 base64 */
+function downloadAndCompress(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith('https') ? https : http;
+    client.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        // 跟随重定向
+        downloadAndCompress(res.headers.location).then(resolve).catch(reject);
+        return;
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', async () => {
+        try {
+          const buffer = Buffer.concat(chunks);
+          const compressed = await sharp(buffer)
+            .resize({ width: 800, withoutEnlargement: true })
+            .jpeg({ quality: 60 })
+            .toBuffer();
+          console.log(`  URL image compressed: ${(buffer.length/1024).toFixed(1)}KB → ${(compressed.length/1024).toFixed(1)}KB`);
+          resolve({ data: compressed.toString('base64'), mediaType: 'image/jpeg' });
+        } catch (e) {
+          console.error('  URL image compression failed:', e.message);
+          reject(e);
+        }
+      });
+    }).on('error', reject);
+  });
+}
+
+// ============ Anthropic → OpenAI 请求转换（异步：压缩图片）============
+async function convertRequest(anthropicBody, opts = {}) {
+  const { compressImages = true } = opts;
   const messages = [];
 
   // Anthropic 的 system prompt 转为 OpenAI 的 system message
@@ -92,11 +158,47 @@ function convertRequest(anthropicBody) {
           } else if (block.type === 'text') {
             parts.push(block.text);
           } else if (block.type === 'image' && block.source) {
+            // 图片压缩
+            let imgData, imgType;
+            if (block.source.type === 'url') {
+              // URL 类型：下载 → 压缩 → base64
+              if (compressImages) {
+                try {
+                  const compressed = await downloadAndCompress(block.source.url);
+                  imgData = compressed.data;
+                  imgType = compressed.mediaType;
+                } catch (e) {
+                  // 下载失败，直接用原始 URL
+                  console.error('  URL download failed, using original URL:', e.message);
+                  parts.push({
+                    type: 'image_url',
+                    image_url: { url: block.source.url }
+                  });
+                  continue;
+                }
+              } else {
+                // 不压缩，直接用原始 URL
+                parts.push({
+                  type: 'image_url',
+                  image_url: { url: block.source.url }
+                });
+                continue;
+              }
+            } else {
+              // base64 类型
+              imgData = block.source.data;
+              imgType = block.source.media_type;
+              if (compressImages) {
+                const compressed = await compressImage(imgData, imgType);
+                imgData = compressed.data;
+                imgType = compressed.mediaType;
+              }
+            }
             // 图片块转为 OpenAI vision 格式
             parts.push({
               type: 'image_url',
               image_url: {
-                url: `data:${block.source.media_type};base64,${block.source.data}`
+                url: `data:${imgType};base64,${imgData}`
               }
             });
           } else if (block.type === 'tool_use') {
@@ -349,18 +451,29 @@ app.get('/', (req, res) => {
 // /v1/messages - Anthropic Messages API
 app.post('/v1/messages', async (req, res) => {
   const anthropicModel = req.body.model || 'claude-sonnet-4-20250514';
-  const modelConfig = getModelConfig(anthropicModel);
-  const targetModel = modelConfig.model;
-  const provider = PROVIDERS[modelConfig.provider];
+  const containsImages = hasImages(req.body);
+  
+  // 有图片时强制走硅基流动视觉模型
+  let modelConfig, targetModel, provider;
+  if (containsImages) {
+    provider = PROVIDERS.siliconflow;
+    targetModel = provider.visionModel;
+    console.log(`\n🖼️  Images detected → routing to vision model: ${targetModel}`);
+  } else {
+    modelConfig = getModelConfig(anthropicModel);
+    targetModel = modelConfig.model;
+    provider = PROVIDERS[modelConfig.provider];
+  }
+  
   const isStream = req.body.stream === true;
 
   console.log(`\n=== [${new Date().toISOString()}] REQUEST ===`);
   console.log(`Anthropic model: ${anthropicModel}`);
-  console.log(`Provider: ${provider.name} | Target: ${targetModel}`);
+  console.log(`Provider: ${provider.name} | Target: ${targetModel} | Has images: ${containsImages}`);
   console.log(`Stream: ${isStream}`);
 
   try {
-    const openaiBody = convertRequest(req.body);
+    const openaiBody = await convertRequest(req.body, { compressImages: containsImages });
     console.log(`Converted body keys: ${Object.keys(openaiBody).join(', ')}`);
     console.log(`model: ${openaiBody.model}`);
     console.log(`max_tokens: ${openaiBody.max_tokens}`);
