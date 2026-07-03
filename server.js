@@ -233,7 +233,6 @@ async function convertRequest(anthropicBody, opts = {}) {
           } else if (block.type === 'tool_result') {
             openaiMsg.role = 'tool';
             openaiMsg.tool_call_id = block.tool_use_id;
-            // 截断过长的 tool 结果，省 token
             const MAX_TOOL_RESULT = 4000;
             if (typeof block.content === 'string') {
               openaiMsg.content = block.content.length > MAX_TOOL_RESULT
@@ -299,10 +298,7 @@ async function convertRequest(anthropicBody, opts = {}) {
                 openaiMsg.content = '[Tool result: image captured]';
                 console.log('  Extracted single image from tool_result');
               } else {
-                const str = JSON.stringify(block.content);
-                openaiMsg.content = str.length > MAX_TOOL_RESULT
-                  ? str.slice(0, MAX_TOOL_RESULT - 50) + `\n... [truncated]`
-                  : str;
+                openaiMsg.content = JSON.stringify(block.content);
               }
             } else {
               openaiMsg.content = String(block.content);
