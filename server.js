@@ -573,12 +573,21 @@ app.post('/v1/messages', async (req, res) => {
       const VISION_MAX_TAIL = 4;
       const systemMsgs = req.body.messages.filter(m => m.role === 'system');
       const otherMsgs = req.body.messages.filter(m => m.role !== 'system');
-      // 保留所有 user 消息（任务上下文），去重后加上尾部最近几条
+      // 保留第一条 user（任务起源）+ 最后一条 user（当前指令）+ 尾部最近几条
       const userMsgs = otherMsgs.filter(m => m.role === 'user');
+      const keyUserMsgs = [];
+      if (userMsgs.length === 1) {
+        keyUserMsgs.push(userMsgs[0]);
+      } else if (userMsgs.length > 1) {
+        keyUserMsgs.push(userMsgs[0]);
+        if (userMsgs[userMsgs.length - 1] !== userMsgs[0]) {
+          keyUserMsgs.push(userMsgs[userMsgs.length - 1]);
+        }
+      }
       const tailMsgs = otherMsgs.slice(-VISION_MAX_TAIL);
       const seen = new Set();
       const trimmedOther = [];
-      for (const m of [...userMsgs, ...tailMsgs]) {
+      for (const m of [...keyUserMsgs, ...tailMsgs]) {
         const k = m.role + ':' + JSON.stringify(m).slice(0, 80);
         if (!seen.has(k)) { seen.add(k); trimmedOther.push(m); }
       }
