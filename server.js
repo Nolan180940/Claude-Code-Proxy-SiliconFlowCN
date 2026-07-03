@@ -158,6 +158,7 @@ async function convertRequest(anthropicBody, opts = {}) {
         '\n[TERMINAL-FIRST RULE - ALWAYS FOLLOW]\n' +
         'For browser and web tasks, ALWAYS use Bash terminal commands instead of CUA tools:\n' +
         '- To open a URL: use `start msedge "URL"` or `start "" "URL"` in Bash — NEVER use cua-computer-use for browser navigation\n' +
+        '- Once the page is open, CUA tools (screenshot, click, type_text) are OK for reading and interacting with page content\n' +
         '- To search: use `start "" "https://www.google.com/search?q=QUERY"`\n' +
         '- To download: use `curl -s "URL"`\n' +
         '- To list files: use `ls` or `Get-ChildItem`\n' +
