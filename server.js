@@ -584,9 +584,8 @@ app.post('/v1/messages', async (req, res) => {
       const seen = new Set();
       const trimmedOther = tailStart.filter(m => { const k = JSON.stringify(m).slice(0, 80); if (seen.has(k)) return false; seen.add(k); return true; });
       req.body.messages = [...systemMsgs, ...trimmedOther];
-      req.body.tools = undefined;
-      req.body.tool_choice = undefined;
-      console.log(`  Vision: trimmed messages ${otherMsgs.length} → ${trimmedOther.length}, tools removed`);
+      // 保留 tools — 视觉模型需要它们来输出正确的 tool_use 格式
+      console.log(`  Vision: trimmed messages ${otherMsgs.length} → ${trimmedOther.length} (tools kept)`);
     }
 
     const openaiBody = await convertRequest(req.body, { compressImages: containsImages, visionPrompt, targetModel });
