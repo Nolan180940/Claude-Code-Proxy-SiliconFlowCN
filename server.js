@@ -571,36 +571,6 @@ app.post('/v1/messages', async (req, res) => {
       ? 'You are a computer-use agent with access to a screenshot of the current screen. Use the available tools to interact with the browser and complete the user\'s task. Look at the screenshot, decide what action to take next (click, type, scroll, etc.), then call the appropriate CUA tool. Keep actions in background mode. Do NOT just describe what you see — take action.'
       : '';
 
-    // 视觉请求时裁剪历史：保留 system + 所有 user 消息 + 最后 N 条，去掉重复
-    if (containsImages && req.body.messages) {
-      const VISION_MAX_TAIL = 4;
-      const systemMsgs = req.body.messages.filter(m => m.role === 'system');
-      const otherMsgs = req.body.messages.filter(m => m.role !== 'system');
-      // 保留第一条 user（任务起源）+ 最后一条 user（当前指令）+ 尾部最近几条
-      const userMsgs = otherMsgs.filter(m => m.role === 'user');
-      const keyUserMsgs = [];
-      if (userMsgs.length === 1) {
-        keyUserMsgs.push(userMsgs[0]);
-      } else if (userMsgs.length > 1) {
-        keyUserMsgs.push(userMsgs[0]);
-        if (userMsgs[userMsgs.length - 1] !== userMsgs[0]) {
-          keyUserMsgs.push(userMsgs[userMsgs.length - 1]);
-        }
-      }
-      const tailMsgs = otherMsgs.slice(-VISION_MAX_TAIL);
-      const seen = new Set();
-      const trimmedOther = [];
-      for (const m of [...keyUserMsgs, ...tailMsgs]) {
-        const k = m.role + ':' + JSON.stringify(m).slice(0, 80);
-        if (!seen.has(k)) { seen.add(k); trimmedOther.push(m); }
-      }
-      req.body.messages = [...systemMsgs, ...trimmedOther];
-      console.log(`  Vision: trimmed messages ${otherMsgs.length} → ${trimmedOther.length} (all user msgs + tail kept)`);
-      req.body.messages = [...systemMsgs, ...trimmedOther];
-      // 保留 tools — 视觉模型需要它们来输出正确的 tool_use 格式
-      console.log(`  Vision: trimmed messages ${otherMsgs.length} → ${trimmedOther.length} (tools kept)`);
-    }
-
     const openaiBody = await convertRequest(req.body, { compressImages: containsImages, visionPrompt, targetModel });
     console.log(`Converted body keys: ${Object.keys(openaiBody).join(', ')}`);
     console.log(`model: ${openaiBody.model}`);
