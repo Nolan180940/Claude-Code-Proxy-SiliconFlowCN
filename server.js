@@ -154,7 +154,14 @@ async function convertRequest(anthropicBody, opts = {}) {
         '- NEVER use delivery_mode:"foreground" unless the user explicitly asks you to "bring this window to front" or "show me".\n' +
         '- NEVER call bring_to_front unless the user explicitly asks you to.\n' +
         '- The user is multitasking — do NOT steal focus or change their active window.\n' +
-        '- Use launch_app WITHOUT bring_to_front for opening apps.\n';
+        '- Use launch_app WITHOUT bring_to_front for opening apps.\n' +
+        '\n[TERMINAL-FIRST RULE - ALWAYS FOLLOW]\n' +
+        'For browser and web tasks, ALWAYS use Bash terminal commands instead of CUA tools:\n' +
+        '- To open a URL: use `start msedge "URL"` or `start "" "URL"` in Bash — NEVER use cua-computer-use for browser navigation\n' +
+        '- To search: use `start "" "https://www.google.com/search?q=QUERY"`\n' +
+        '- To download: use `curl -s "URL"`\n' +
+        '- To list files: use `ls` or `Get-ChildItem`\n' +
+        '- CUA tools (get_window_state, click, type_text, screenshot loops) are ONLY for GUI desktop apps with no terminal equivalent. Do NOT use them for browser tasks.\n';
       messages.push({ role: 'system', content: systemContent + bgRule });
     }
   }
