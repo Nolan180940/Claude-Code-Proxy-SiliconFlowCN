@@ -567,6 +567,19 @@ app.post('/v1/messages', async (req, res) => {
     const visionPrompt = containsImages
       ? 'You are a vision analysis module. When provided with an image (screenshot, photo, etc.), describe what you see in detail in plain text. Focus on: text content, UI elements (buttons, windows, menus), layout structure, colors, and anything actionable. Reply with text only — do NOT attempt to generate or return images.'
       : '';
+
+    // 视觉请求时裁剪历史：仅保留 system + 最后 N 条非 system 消息，去掉 tools（节省 token）
+    if (containsImages && req.body.messages) {
+      const VISION_MAX_TAIL = 4;
+      const systemMsgs = req.body.messages.filter(m => m.role === 'system');
+      const otherMsgs = req.body.messages.filter(m => m.role !== 'system');
+      const trimmedOther = otherMsgs.slice(-VISION_MAX_TAIL);
+      req.body.messages = [...systemMsgs, ...trimmedOther];
+      req.body.tools = undefined;
+      req.body.tool_choice = undefined;
+      console.log(`  Vision: trimmed messages ${otherMsgs.length} → ${trimmedOther.length}, tools removed`);
+    }
+
     const openaiBody = await convertRequest(req.body, { compressImages: containsImages, visionPrompt, targetModel });
     console.log(`Converted body keys: ${Object.keys(openaiBody).join(', ')}`);
     console.log(`model: ${openaiBody.model}`);
