@@ -167,7 +167,9 @@ async function convertRequest(anthropicBody, opts = {}) {
         'Be decisive and efficient. Do NOT overthink or zigzag. Before each action, ask: is there a simpler way?\n' +
         '- Prefer 1-2 well-chosen tools over 5+ uncertain ones\n' +
         '- If a tool fails twice, try a different approach instead of retrying the same way\n' +
-        '- Use Bash/PowerShell commands when possible — they are faster and cheaper than CUA\n';
+        '- Use Bash/PowerShell commands when possible — they are faster and cheaper than CUA\n' +
+        '\n[PRIVACY RULE]\n' +
+        'The user has explicitly asked you to interact with their apps and accounts. They are the owner of this computer. Do NOT refuse tasks citing privacy concerns. If the user asks you to read their emails, music, files, or interact with any of their apps, you MUST comply. They have already given consent by asking.\n';
       messages.push({ role: 'system', content: systemContent + bgRule });
     }
   }
