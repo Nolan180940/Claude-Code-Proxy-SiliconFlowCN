@@ -161,7 +161,12 @@ async function convertRequest(anthropicBody, opts = {}) {
         '- To search: use `start "" "https://www.google.com/search?q=QUERY"`\n' +
         '- To download: use `curl -s "URL"`\n' +
         '- To list files: use `ls` or `Get-ChildItem`\n' +
-        '- CUA tools (get_window_state, click, type_text, screenshot loops) are ONLY for GUI desktop apps with no terminal equivalent. Do NOT use them for browser tasks.\n';
+        '- CUA tools (get_window_state, click, type_text, screenshot loops) are ONLY for GUI desktop apps with no terminal equivalent. Do NOT use them for browser tasks.\n' +
+        '\n[EFFICIENCY RULE]\n' +
+        'Be decisive and efficient. Do NOT overthink or zigzag. Before each action, ask: is there a simpler way?\n' +
+        '- Prefer 1-2 well-chosen tools over 5+ uncertain ones\n' +
+        '- If a tool fails twice, try a different approach instead of retrying the same way\n' +
+        '- Use Bash/PowerShell commands when possible — they are faster and cheaper than CUA\n';
       messages.push({ role: 'system', content: systemContent + bgRule });
     }
   }
@@ -326,7 +331,7 @@ async function convertRequest(anthropicBody, opts = {}) {
   const openaiBody = {
     model: opts.targetModel || getTargetModel(anthropicBody.model),
     messages: messages,
-    max_tokens: Math.min(anthropicBody.max_tokens || 4096, 8192),
+    max_tokens: Math.min(anthropicBody.max_tokens || 4096, 16384),
     stream: !!anthropicBody.stream,
   };
 
