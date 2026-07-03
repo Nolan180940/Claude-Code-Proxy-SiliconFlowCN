@@ -565,7 +565,7 @@ app.post('/v1/messages', async (req, res) => {
 
   try {
     const visionPrompt = containsImages
-      ? 'You are a vision analysis module. When provided with an image (screenshot, photo, etc.), describe what you see in detail in plain text. Focus on: text content, UI elements (buttons, windows, menus), layout structure, colors, and anything actionable. Reply with text only — do NOT attempt to generate or return images.'
+      ? 'You are a computer-use agent with access to a screenshot of the current screen. Use the available tools to interact with the browser and complete the user\'s task. Look at the screenshot, decide what action to take next (click, type, scroll, etc.), then call the appropriate CUA tool. Keep actions in background mode. Do NOT just describe what you see — take action.'
       : '';
 
     // 视觉请求时裁剪历史：保留 system + 第一条 user + 最后 N 条，去掉 tools
