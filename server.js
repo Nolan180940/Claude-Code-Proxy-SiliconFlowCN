@@ -568,12 +568,21 @@ app.post('/v1/messages', async (req, res) => {
       ? 'You are a vision analysis module. When provided with an image (screenshot, photo, etc.), describe what you see in detail in plain text. Focus on: text content, UI elements (buttons, windows, menus), layout structure, colors, and anything actionable. Reply with text only — do NOT attempt to generate or return images.'
       : '';
 
-    // 视觉请求时裁剪历史：仅保留 system + 最后 N 条非 system 消息，去掉 tools（节省 token）
+    // 视觉请求时裁剪历史：保留 system + 第一条 user + 最后 N 条，去掉 tools
     if (containsImages && req.body.messages) {
       const VISION_MAX_TAIL = 4;
       const systemMsgs = req.body.messages.filter(m => m.role === 'system');
       const otherMsgs = req.body.messages.filter(m => m.role !== 'system');
-      const trimmedOther = otherMsgs.slice(-VISION_MAX_TAIL);
+      // 保留第一条 user 消息（原问题），确保视觉模型知道要干嘛
+      const firstUserIdx = otherMsgs.findIndex(m => m.role === 'user');
+      const firstUser = firstUserIdx >= 0 ? otherMsgs[firstUserIdx] : null;
+      // 尾部保留最近几条，排除已保留的第一条 user
+      const tailStart = firstUser && otherMsgs.indexOf(firstUser) === otherMsgs.length - VISION_MAX_TAIL - 1
+        ? otherMsgs.slice(-VISION_MAX_TAIL - 1)  // first user overlaps with tail, include it once
+        : [...(firstUser ? [firstUser] : []), ...otherMsgs.slice(-VISION_MAX_TAIL)];
+      // 去重
+      const seen = new Set();
+      const trimmedOther = tailStart.filter(m => { const k = JSON.stringify(m).slice(0, 80); if (seen.has(k)) return false; seen.add(k); return true; });
       req.body.messages = [...systemMsgs, ...trimmedOther];
       req.body.tools = undefined;
       req.body.tool_choice = undefined;
