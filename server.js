@@ -568,21 +568,22 @@ app.post('/v1/messages', async (req, res) => {
       ? 'You are a computer-use agent with access to a screenshot of the current screen. Use the available tools to interact with the browser and complete the user\'s task. Look at the screenshot, decide what action to take next (click, type, scroll, etc.), then call the appropriate CUA tool. Keep actions in background mode. Do NOT just describe what you see — take action.'
       : '';
 
-    // 视觉请求时裁剪历史：保留 system + 第一条 user + 最后 N 条，去掉 tools
+    // 视觉请求时裁剪历史：保留 system + 所有 user 消息 + 最后 N 条，去掉重复
     if (containsImages && req.body.messages) {
       const VISION_MAX_TAIL = 4;
       const systemMsgs = req.body.messages.filter(m => m.role === 'system');
       const otherMsgs = req.body.messages.filter(m => m.role !== 'system');
-      // 保留第一条 user 消息（原问题），确保视觉模型知道要干嘛
-      const firstUserIdx = otherMsgs.findIndex(m => m.role === 'user');
-      const firstUser = firstUserIdx >= 0 ? otherMsgs[firstUserIdx] : null;
-      // 尾部保留最近几条，排除已保留的第一条 user
-      const tailStart = firstUser && otherMsgs.indexOf(firstUser) === otherMsgs.length - VISION_MAX_TAIL - 1
-        ? otherMsgs.slice(-VISION_MAX_TAIL - 1)  // first user overlaps with tail, include it once
-        : [...(firstUser ? [firstUser] : []), ...otherMsgs.slice(-VISION_MAX_TAIL)];
-      // 去重
+      // 保留所有 user 消息（任务上下文），去重后加上尾部最近几条
+      const userMsgs = otherMsgs.filter(m => m.role === 'user');
+      const tailMsgs = otherMsgs.slice(-VISION_MAX_TAIL);
       const seen = new Set();
-      const trimmedOther = tailStart.filter(m => { const k = JSON.stringify(m).slice(0, 80); if (seen.has(k)) return false; seen.add(k); return true; });
+      const trimmedOther = [];
+      for (const m of [...userMsgs, ...tailMsgs]) {
+        const k = m.role + ':' + JSON.stringify(m).slice(0, 80);
+        if (!seen.has(k)) { seen.add(k); trimmedOther.push(m); }
+      }
+      req.body.messages = [...systemMsgs, ...trimmedOther];
+      console.log(`  Vision: trimmed messages ${otherMsgs.length} → ${trimmedOther.length} (all user msgs + tail kept)`);
       req.body.messages = [...systemMsgs, ...trimmedOther];
       // 保留 tools — 视觉模型需要它们来输出正确的 tool_use 格式
       console.log(`  Vision: trimmed messages ${otherMsgs.length} → ${trimmedOther.length} (tools kept)`);
