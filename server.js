@@ -331,7 +331,7 @@ async function convertRequest(anthropicBody, opts = {}) {
   const openaiBody = {
     model: opts.targetModel || getTargetModel(anthropicBody.model),
     messages: messages,
-    max_tokens: Math.min(anthropicBody.max_tokens || 4096, 16384),
+    max_tokens: Math.min(anthropicBody.max_tokens || 4096, 393216),
     stream: !!anthropicBody.stream,
   };
 
