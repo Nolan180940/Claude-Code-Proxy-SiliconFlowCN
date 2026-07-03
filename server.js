@@ -20,7 +20,7 @@ const PROVIDERS = {
     base: 'https://api.siliconflow.cn',
     apiKey: process.env.SILICONFLOW_API_KEY || '',
     // 带图的请求用视觉模型
-    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'nex-agi/Nex-N2-Pro',
+    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'Qwen/Qwen3-VL-32B-Thinking',
   },
 };
 
@@ -149,20 +149,27 @@ async function convertRequest(anthropicBody, opts = {}) {
       : (Array.isArray(anthropicBody.system) ? anthropicBody.system.map(b => b.text || '').join('\n') : '');
     if (systemContent) {
       const bgRule = '\n\n[CRITICAL RULE - ALWAYS FOLLOW]\n' +
+        '\n[BROWSER-USE MCP RULE]\n' +
+        'browser-use MCP tools (browser_navigate, browser_click, browser_type, browser_screenshot, browser_get_state, browser_scroll, browser_get_html, browser_extract_content, browser_go_back, browser_list_tabs, browser_switch_tab, browser_close_tab) are available for browser automation. When the user asks you to interact with web pages, PREFER these browser-use MCP tools over CUA or terminal commands:\n' +
+        '- Use browser_navigate to open URLs (NOT start msedge)\n' +
+        '- Use browser_get_state to read page content and find interactive elements\n' +
+        '- Use browser_click with element index to click buttons/links\n' +
+        '- Use browser_type to fill in form fields\n' +
+        '- Use browser_screenshot to capture the page\n' +
+        '- Use browser_scroll to scroll up/down\n' +
+        '- browser-use is reliable and purpose-built for web automation — always try it first for browser tasks\n' +
+        '\n[CUA BACKGROUND RULE]\n' +
         'When using Cua computer-use tools (mcp__cua-computer-use__*):\n' +
         '- ALWAYS use delivery_mode:"background" for click, type_text, scroll, press_key, hotkey, drag, and all input actions.\n' +
         '- NEVER use delivery_mode:"foreground" unless the user explicitly asks you to "bring this window to front" or "show me".\n' +
         '- NEVER call bring_to_front unless the user explicitly asks you to.\n' +
         '- The user is multitasking — do NOT steal focus or change their active window.\n' +
         '- Use launch_app WITHOUT bring_to_front for opening apps.\n' +
-        '\n[TERMINAL-FIRST RULE - ALWAYS FOLLOW]\n' +
-        'For browser and web tasks, ALWAYS use Bash terminal commands instead of CUA tools:\n' +
-        '- To open a URL: use `start msedge "URL"` or `start "" "URL"` in Bash — NEVER use cua-computer-use for browser navigation\n' +
-        '- Once the page is open, CUA tools (screenshot, click, type_text) are OK for reading and interacting with page content\n' +
-        '- To search: use `start "" "https://www.google.com/search?q=QUERY"`\n' +
+        '\n[TERMINAL RULE - FOR NON-BROWSER TASKS]\n' +
+        'For file operations, downloads, system info, and non-browser tasks, use Bash/PowerShell:\n' +
         '- To download: use `curl -s "URL"`\n' +
         '- To list files: use `ls` or `Get-ChildItem`\n' +
-        '- CUA tools (get_window_state, click, type_text, screenshot loops) are ONLY for GUI desktop apps with no terminal equivalent. Do NOT use them for browser tasks.\n' +
+        '- To search: use `start "" "https://www.google.com/search?q=QUERY"` (only if user just wants to search, not interact)\n' +
         '\n[EFFICIENCY RULE]\n' +
         'Be decisive and efficient. Do NOT overthink or zigzag. Before each action, ask: is there a simpler way?\n' +
         '- Prefer 1-2 well-chosen tools over 5+ uncertain ones\n' +
@@ -320,10 +327,22 @@ async function convertRequest(anthropicBody, opts = {}) {
             }
           }
         }
-        if (parts.length > 0 && !openaiMsg.tool_calls) {
+        if (parts.length > 0) {
           // 全是字符串就拼接，否则保持数组（含图片等混合内容）
           const allStrings = parts.every(p => typeof p === 'string');
           openaiMsg.content = allStrings ? parts.join('\n') : parts;
+        }
+      }
+
+      // 从文本中提取嵌入的 reasoning_content marker
+      if (msg.role === 'assistant' && typeof openaiMsg.content === 'string') {
+        const markerMatch = openaiMsg.content.match(/<!--DEESPEK_REASONING:([A-Za-z0-9+/=]+)-->/);
+        if (markerMatch) {
+          openaiMsg.reasoning_content = Buffer.from(markerMatch[1], 'base64').toString('utf-8');
+          // 从内容中去掉 marker
+          openaiMsg.content = openaiMsg.content.replace(/<!--DEESPEK_REASONING:[A-Za-z0-9+/=]+-->\n?/g, '').trim();
+          // 去掉后为空则保留一个空格（DeepSeek 不接受空字符串）
+          if (!openaiMsg.content) openaiMsg.content = ' ';
         }
       }
 
@@ -382,6 +401,55 @@ async function convertRequest(anthropicBody, opts = {}) {
   return openaiBody;
 }
 
+// ============ reasoning_content 持久化缓存 ============
+// DeepSeek thinking mode: 必须把 reasoning_content 原样传回
+// 用 assistant 消息内容的 hash 做 key，精确匹配，持久化到磁盘
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const REASONING_FILE = path.join(require('os').tmpdir(), 'claude-proxy-reasoning.json');
+
+function hashContent(content) {
+  const str = typeof content === 'string' ? content : JSON.stringify(content || '');
+  return crypto.createHash('md5').update(str.slice(0, 500)).digest('hex');
+}
+
+function loadReasoningMap() {
+  try {
+    if (fs.existsSync(REASONING_FILE)) {
+      return new Map(JSON.parse(fs.readFileSync(REASONING_FILE, 'utf8')));
+    }
+  } catch (e) { /* ignore */ }
+  return new Map();
+}
+
+function saveReasoningMap(map) {
+  try {
+    // 只保留最近 50 条
+    const entries = [...map.entries()].slice(-50);
+    fs.writeFileSync(REASONING_FILE, JSON.stringify(entries));
+  } catch (e) { /* ignore */ }
+}
+
+const reasoningMap = loadReasoningMap();
+
+function cacheReasoning(content, reasoning) {
+  if (!reasoning) return;
+  const key = hashContent(content);
+  console.log(`[reasoning] CACHE key=${key.slice(0,16)}... content_len=${(typeof content === 'string' ? content : JSON.stringify(content||'')).length}`);
+  reasoningMap.set(key, reasoning);
+  saveReasoningMap(reasoningMap);
+}
+
+function getCachedReasoning(content) {
+  if (!content && content !== '') return null;
+  const key = hashContent(content);
+  const found = reasoningMap.has(key);
+  console.log(`[reasoning] GET key=${key.slice(0,16)}... found=${found} map_size=${reasoningMap.size}`);
+  if (found) return reasoningMap.get(key);
+  return null;
+}
+
 // ============ OpenAI → Anthropic 响应转换（非流式）============
 function convertResponse(openaiBody, anthropicModel) {
   const choice = openaiBody.choices && openaiBody.choices[0];
@@ -403,6 +471,17 @@ function convertResponse(openaiBody, anthropicModel) {
 
   if (message.content) {
     content.push({ type: 'text', text: message.content });
+  }
+
+  // 把 reasoning_content 嵌入文本，Claude Code 会原样保留在对话历史中
+  const reasoning = openaiBody.choices[0]?.message?.reasoning_content;
+  if (reasoning && content.length > 0 && content[0].type === 'text') {
+    const b64 = Buffer.from(reasoning, 'utf-8').toString('base64');
+    content[0].text = `\n<!--DEESPEK_REASONING:${b64}-->\n` + content[0].text;
+  } else if (reasoning) {
+    // tool-only，塞入第一个 tool_use 的 input 里
+    const b64 = Buffer.from(reasoning, 'utf-8').toString('base64');
+    content.unshift({ type: 'text', text: `<!--DEESPEK_REASONING:${b64}-->` });
   }
 
   if (message.tool_calls) {
@@ -627,6 +706,9 @@ app.post('/v1/messages', async (req, res) => {
       let messageStarted = false;
       let startedBlockIndices = new Set();  // 追踪所有已开始的 content block index
       let resEnded = false;
+      let accumulatedContent = '';     // 累积 content 用于缓存 reasoning
+      let accumulatedReasoning = '';   // 累积 reasoning_content
+      let reasoningMarkerInjected = false;  // 标记是否已注入 reasoning marker
 
       const safeWrite = (data) => {
         if (!resEnded) { res.write(data); }
@@ -687,11 +769,26 @@ app.post('/v1/messages', async (req, res) => {
                 }
 
                 if (delta.content) {
+                  accumulatedContent += delta.content;
                   if (!startedBlockIndices.has(0)) {
                     startedBlockIndices.add(0);
+                    // 首个文本块：如果已有 reasoning，注入 marker
+                    let firstText = delta.content;
+                    if (accumulatedReasoning && !reasoningMarkerInjected) {
+                      const b64 = Buffer.from(accumulatedReasoning, 'utf-8').toString('base64');
+                      firstText = `\n<!--DEESPEK_REASONING:${b64}-->\n` + firstText;
+                      reasoningMarkerInjected = true;
+                    }
                     safeWrite(`event: content_block_start\ndata: ${JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })}\n\n`);
+                    safeWrite(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: firstText } })}\n\n`);
+                  } else {
+                    safeWrite(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: delta.content } })}\n\n`);
                   }
-                  safeWrite(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: delta.content } })}\n\n`);
+                }
+
+                // 累积 reasoning_content（thinking 模式）
+                if (delta.reasoning_content) {
+                  accumulatedReasoning += delta.reasoning_content;
                 }
 
                 if (delta.tool_calls) {
@@ -712,6 +809,14 @@ app.post('/v1/messages', async (req, res) => {
                   let stop_reason = 'end_turn';
                   if (choice.finish_reason === 'length') stop_reason = 'max_tokens';
                   else if (choice.finish_reason === 'tool_calls') stop_reason = 'tool_use';
+
+                  // 如果只有 reasoning 没有文字，注入 marker 文本块
+                  if (accumulatedReasoning && !startedBlockIndices.has(0) && !reasoningMarkerInjected) {
+                    const b64 = Buffer.from(accumulatedReasoning, 'utf-8').toString('base64');
+                    startedBlockIndices.add(0);
+                    safeWrite(`event: content_block_start\ndata: ${JSON.stringify({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })}\n\n`);
+                    safeWrite(`event: content_block_delta\ndata: ${JSON.stringify({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: `<!--DEESPEK_REASONING:${b64}-->` } })}\n\n`);
+                  }
 
                   stopAllBlocks();
 
