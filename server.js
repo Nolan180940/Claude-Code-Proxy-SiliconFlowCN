@@ -20,7 +20,7 @@ const PROVIDERS = {
     base: 'https://api.siliconflow.cn',
     apiKey: process.env.SILICONFLOW_API_KEY || '',
     // 带图的请求用视觉模型
-    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'Qwen/Qwen3-VL-32B-Thinking',
+    visionModel: process.env.SILICONFLOW_VISION_MODEL || 'nex-agi/Nex-N2-Pro',
   },
 };
 
@@ -136,7 +136,7 @@ function downloadAndCompress(url) {
 
 // ============ Anthropic → OpenAI 请求转换（异步：压缩图片）============
 async function convertRequest(anthropicBody, opts = {}) {
-  const { compressImages = true, visionPrompt = '' } = opts;
+  const { compressImages = true, visionPrompt = '', targetModel } = opts;
   const messages = [];
 
   // Anthropic 的 system prompt 转为 OpenAI 的 system message
@@ -149,15 +149,14 @@ async function convertRequest(anthropicBody, opts = {}) {
       : (Array.isArray(anthropicBody.system) ? anthropicBody.system.map(b => b.text || '').join('\n') : '');
     if (systemContent) {
       const bgRule = '\n\n[CRITICAL RULE - ALWAYS FOLLOW]\n' +
-        '\n[BROWSER-USE MCP RULE]\n' +
-        'browser-use MCP tools (browser_navigate, browser_click, browser_type, browser_screenshot, browser_get_state, browser_scroll, browser_get_html, browser_extract_content, browser_go_back, browser_list_tabs, browser_switch_tab, browser_close_tab) are available for browser automation. When the user asks you to interact with web pages, PREFER these browser-use MCP tools over CUA or terminal commands:\n' +
-        '- Use browser_navigate to open URLs (NOT start msedge)\n' +
-        '- Use browser_get_state to read page content and find interactive elements\n' +
-        '- Use browser_click with element index to click buttons/links\n' +
-        '- Use browser_type to fill in form fields\n' +
-        '- Use browser_screenshot to capture the page\n' +
-        '- Use browser_scroll to scroll up/down\n' +
-        '- browser-use is reliable and purpose-built for web automation — always try it first for browser tasks\n' +
+        '\n[BROWSER RULE — TWO PATHS, PICK ONE]\n' +
+        'Path A — public pages (forms, docs, httpbin, wikipedia, etc.): use Playwright MCP exclusively.\n' +
+        '  - browser_navigate to open, browser_get_state to read, browser_click/browser_type to interact, browser_screenshot to capture.\n' +
+        '  - Playwright opens its OWN browser window — you CANNOT mix Path A and Path B on the same page.\n' +
+        'Path B — pages needing YOUR login (Gmail, GitHub, WeChat, banks, etc.): use Bash `start msedge "URL"` then CUA.\n' +
+        '  - `start msedge "URL"` opens YOUR real Edge with all cookies/logins.\n' +
+        '  - Then use mcp__cua-computer-use__* tools to interact: get_window_state for screenshot/accessibility, click/type_text for input.\n' +
+        'Choice: if the user would need to log in → Path B. If the page is public → Path A.\n' +
         '\n[CUA BACKGROUND RULE]\n' +
         'When using Cua computer-use tools (mcp__cua-computer-use__*):\n' +
         '- ALWAYS use delivery_mode:"background" for click, type_text, scroll, press_key, hotkey, drag, and all input actions.\n' +
@@ -634,7 +633,7 @@ app.post('/v1/messages', async (req, res) => {
   const anthropicModel = req.body.model || 'claude-sonnet-4-20250514';
   const containsImages = hasImages(req.body);
   
-  // 有图片时强制走硅基流动视觉模型
+  // 有图片时走硅基流动视觉模型
   let modelConfig, targetModel, provider;
   if (containsImages) {
     provider = PROVIDERS.siliconflow;
@@ -659,6 +658,15 @@ app.post('/v1/messages', async (req, res) => {
       : '';
 
     const openaiBody = await convertRequest(req.body, { compressImages: containsImages, visionPrompt, targetModel });
+
+    // SiliconFlow 不支持 reasoning_content，必须去掉
+    if (provider.name !== 'DeepSeek') {
+      for (const msg of openaiBody.messages) {
+        if (msg.reasoning_content) {
+          delete msg.reasoning_content;
+        }
+      }
+    }
     console.log(`Converted body keys: ${Object.keys(openaiBody).join(', ')}`);
     console.log(`model: ${openaiBody.model}`);
     console.log(`max_tokens: ${openaiBody.max_tokens}`);
