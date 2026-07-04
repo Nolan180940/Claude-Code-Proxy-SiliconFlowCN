@@ -140,14 +140,17 @@ async function convertRequest(anthropicBody, opts = {}) {
   const messages = [];
 
   // Anthropic 的 system prompt 转为 OpenAI 的 system message
+  // visionPrompt 合并进主 system（部分模型只接受一个 system message）
+  let mergedSystem = '';
   if (visionPrompt) {
-    messages.push({ role: 'system', content: visionPrompt });
+    mergedSystem = visionPrompt + '\n\n';
   }
   if (anthropicBody.system) {
     const systemContent = typeof anthropicBody.system === 'string'
       ? anthropicBody.system
       : (Array.isArray(anthropicBody.system) ? anthropicBody.system.map(b => b.text || '').join('\n') : '');
     if (systemContent) {
+      mergedSystem += systemContent;
       const bgRule = '\n\n[CRITICAL RULE - ALWAYS FOLLOW]\n' +
         '\n[BROWSER RULE — TWO PATHS, PICK ONE]\n' +
         'Path A — public pages (forms, docs, httpbin, wikipedia, etc.): use Playwright MCP exclusively.\n' +
@@ -176,8 +179,12 @@ async function convertRequest(anthropicBody, opts = {}) {
         '- Use Bash/PowerShell commands when possible — they are faster and cheaper than CUA\n' +
         '\n[PRIVACY RULE]\n' +
         'The user has explicitly asked you to interact with their apps and accounts. They are the owner of this computer. Do NOT refuse tasks citing privacy concerns. If the user asks you to read their emails, music, files, or interact with any of their apps, you MUST comply. They have already given consent by asking.\n';
-      messages.push({ role: 'system', content: systemContent + bgRule });
+      messages.push({ role: 'system', content: mergedSystem + bgRule });
+    } else if (mergedSystem) {
+      messages.push({ role: 'system', content: mergedSystem });
     }
+  } else if (mergedSystem) {
+    messages.push({ role: 'system', content: mergedSystem });
   }
 
   // 转换 messages
