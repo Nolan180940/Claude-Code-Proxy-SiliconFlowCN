@@ -666,8 +666,9 @@ app.post('/v1/messages', async (req, res) => {
 
     const openaiBody = await convertRequest(req.body, { compressImages: containsImages, visionPrompt, targetModel });
 
-    // SiliconFlow 不支持 reasoning_content，必须去掉
+    // SiliconFlow 不支持 reasoning_content，必须去掉；同时关掉 thinking 避免烧 token
     if (provider.name !== 'DeepSeek') {
+      openaiBody.thinking = { type: 'disabled' };
       for (const msg of openaiBody.messages) {
         if (msg.reasoning_content) {
           delete msg.reasoning_content;
